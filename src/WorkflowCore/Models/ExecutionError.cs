@@ -11,5 +11,7 @@ namespace WorkflowCore.Models
         public string ExecutionPointerId { get; set; }
 
         public string Message { get; set; }
+        
+        public Exception Exception { get; set; }
     }
 }

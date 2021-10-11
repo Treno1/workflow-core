@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using WorkflowCore.Exceptions;
@@ -30,7 +32,7 @@ namespace WorkflowCore.Services
             _dateTimeProvider = dateTimeProvider;
         }
 
-        public Task<WorkflowInstance> RunWorkflowSync<TData>(string workflowId, int version, TData data,
+        public Task<(WorkflowInstance, List<ExecutionError>)> RunWorkflowSync<TData>(string workflowId, int version, TData data,
             string reference, TimeSpan timeOut, bool persistSate = true)
             where TData : new()
         {
@@ -38,7 +40,7 @@ namespace WorkflowCore.Services
                 persistSate);
         }
 
-        public async Task<WorkflowInstance> RunWorkflowSync<TData>(string workflowId, int version, TData data, string reference, CancellationToken token, bool persistSate = true)
+        public async Task<(WorkflowInstance, List<ExecutionError>)> RunWorkflowSync<TData>(string workflowId, int version, TData data, string reference, CancellationToken token, bool persistSate = true)
             where TData : new()
         {
             var def = _registry.GetDefinition(workflowId, version);
@@ -82,12 +84,15 @@ namespace WorkflowCore.Services
             {
                 throw new InvalidOperationException();
             }
+            
+            var errors = new List<ExecutionError>();
 
             try
             {
                 while ((wf.Status == WorkflowStatus.Runnable) && !token.IsCancellationRequested)
                 {
-                    await _executor.Execute(wf, token);
+                    var result = await _executor.Execute(wf, token);
+                    if(result.Errors?.Any() != null) errors.AddRange(result.Errors);
                     if (persistSate)
                         await _persistenceStore.PersistWorkflow(wf, token);
                 }
@@ -100,7 +105,7 @@ namespace WorkflowCore.Services
             if (persistSate)
                 await _queueService.QueueWork(id, QueueType.Index);
 
-            return wf;
+            return (wf, errors);
         }
     }
 }
